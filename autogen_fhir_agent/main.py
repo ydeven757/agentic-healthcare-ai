@@ -6,6 +6,8 @@ Main application for running multi-agent conversational healthcare AI with FHIR 
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 import uvicorn
@@ -18,7 +20,6 @@ import json
 import sys
 
 # Add shared modules to path
-import os
 shared_path = os.path.join(os.path.dirname(__file__), '..', 'shared')
 if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
@@ -29,10 +30,7 @@ try:
     from fhir_client import FHIRConfig
     from healthcare_models import PatientSummary, ClinicalAssessment
 except ImportError as e:
-    # Fallback: try direct import
     print(f"Import error: {e}")
-    print(f"Python path: {sys.path}")
-    # Create minimal classes if shared modules aren't available
     class FHIRConfig:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
@@ -54,24 +52,51 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global variables
+autogen_system: "HealthcareAutogenSystem | None" = None
+active_connections: List[WebSocket] = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: initialize and cleanup resources."""
+    global autogen_system
+    load_dotenv(dotenv_path='../.env')
+    try:
+        fhir_config = FHIRConfig(
+            base_url=os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir/"),
+            client_id=os.getenv("FHIR_CLIENT_ID", "autogen_healthcare_ai"),
+            client_secret=os.getenv("FHIR_CLIENT_SECRET"),
+            scopes=["patient/*.read", "user/*.read", "offline_access"]
+        )
+        api_key = os.getenv("OPENAI_API_KEY", "demo_key_for_testing")
+        autogen_system = HealthcareAutogenSystem(api_key, fhir_config)
+        logger.info("Autogen Healthcare Agent System initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize agent system: {e}")
+        raise
+    yield
+
+
 # FastAPI app setup
 app = FastAPI(
     title="Autogen Healthcare FHIR Agent System",
     description="Multi-agent conversational AI for healthcare with FHIR integration using Autogen framework",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3030").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Create reports directory if it doesn't exist
-import os
 reports_dir = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(reports_dir, exist_ok=True)
 
@@ -80,10 +105,6 @@ app.mount("/static/reports", StaticFiles(directory=reports_dir), name="reports")
 
 # Security
 security = HTTPBearer()
-
-# Global variables
-autogen_system: HealthcareAutogenSystem = None
-active_connections: List[WebSocket] = []
 
 
 class ConversationRequest(BaseModel):
@@ -141,42 +162,22 @@ class PDFGenerationResponse(BaseModel):
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate authentication token"""
-    # In production, implement proper JWT validation
-    if not credentials.credentials:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    return {"user_id": "healthcare_provider", "role": "physician"}
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the Autogen healthcare system on startup"""
-    global autogen_system
-    
-    # Load .env file explicitly
-    from dotenv import load_dotenv
-    load_dotenv(dotenv_path='../.env')
-
+    """Validate authentication token using JWT."""
+    jwt_secret = os.getenv("JWT_SECRET_KEY")
+    if not jwt_secret:
+        logger.warning("JWT_SECRET_KEY not set – accepting any token (dev mode)")
+        return {"user_id": "healthcare_provider", "role": "physician"}
     try:
-        # Configure FHIR client
-        fhir_config = FHIRConfig(
-            base_url=os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir/"),
-            client_id=os.getenv("FHIR_CLIENT_ID", "autogen_healthcare_ai"),
-            client_secret=os.getenv("FHIR_CLIENT_SECRET"),
-            scopes=["patient/*.read", "user/*.read", "offline_access"]
+        from jose import jwt as jose_jwt, JWTError
+        payload = jose_jwt.decode(
+            credentials.credentials, jwt_secret, algorithms=["HS256"]
         )
-        
-        # Initialize Autogen system
-        autogen_system = HealthcareAutogenSystem(
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            fhir_config=fhir_config
-        )
-        
-        logger.info("Autogen Healthcare Agent System initialized successfully")
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize Autogen system: {e}")
-        raise
+        return {
+            "user_id": payload.get("sub", "unknown"),
+            "role": payload.get("role", "physician"),
+        }
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @app.get("/")
@@ -257,7 +258,8 @@ async def start_comprehensive_conversation(
         error_details = traceback.format_exc()
         logger.error(f"Comprehensive conversation failed for patient {request.patient_id}: {e}")
         logger.error(f"Full error traceback: {error_details}")
-        raise HTTPException(status_code=500, detail=f"Conversation failed: {str(e)}")
+        logger.exception("Conversation failed")
+        raise HTTPException(status_code=500, detail="Conversation failed. Check server logs for details.")
 
 
 @app.post("/conversation/emergency", response_model=ConversationResponse)
@@ -299,7 +301,8 @@ async def start_emergency_conversation(
         
     except Exception as e:
         logger.error(f"Emergency conversation failed for patient {request.patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Emergency conversation failed: {str(e)}")
+        logger.exception("Emergency conversation failed")
+        raise HTTPException(status_code=500, detail="Emergency conversation failed. Check server logs for details.")
 
 
 @app.post("/conversation/medication-review", response_model=ConversationResponse)
@@ -338,7 +341,8 @@ async def start_medication_review_conversation(
         
     except Exception as e:
         logger.error(f"Medication review failed for patient {request.patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Medication review failed: {str(e)}")
+        logger.exception("Medication review failed")
+        raise HTTPException(status_code=500, detail="Medication review failed. Check server logs for details.")
 
 
 @app.get("/patient/{patient_id}/summary")
@@ -372,7 +376,8 @@ async def get_patient_summary(
         
     except Exception as e:
         logger.error(f"Failed to retrieve patient summary for {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve patient data: {str(e)}")
+        logger.exception("Failed to retrieve patient data")
+        raise HTTPException(status_code=500, detail="Failed to retrieve patient data. Check server logs for details.")
 
 
 @app.get("/agents/status")
@@ -658,7 +663,8 @@ async def run_comprehensive_conversation_compat(
             
             logger.error(f"Tracked error: {error_type} ({error_code}) - {error_message}")
         
-        raise HTTPException(status_code=500, detail=f"Conversation failed: {str(e)}")
+        logger.exception("Conversation failed")
+        raise HTTPException(status_code=500, detail="Conversation failed. Check server logs for details.")
 
 
 @app.post("/emergency")  

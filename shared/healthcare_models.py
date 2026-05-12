@@ -6,7 +6,7 @@ Defines data structures for clinical workflows and AI agent interactions
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any, Union, Literal
 from enum import Enum
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import uuid
 
 
@@ -52,13 +52,14 @@ class PatientDemographics(BaseModel):
     email: Optional[str] = Field(None, description="Contact email")
     emergency_contact: Optional[str] = Field(None, description="Emergency contact information")
     
-    @validator('age', always=True)
-    def calculate_age(cls, v, values):
-        if 'birth_date' in values:
+    @model_validator(mode='after')
+    def calculate_age(self):
+        if self.birth_date:
             today = date.today()
-            birth_date = values['birth_date']
-            return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
-        return v
+            self.age = today.year - self.birth_date.year - (
+                (today.month, today.day) < (self.birth_date.month, self.birth_date.day)
+            )
+        return self
 
 
 class VitalSigns(BaseModel):
@@ -72,20 +73,23 @@ class VitalSigns(BaseModel):
     oxygen_saturation: Optional[float] = Field(None, description="Oxygen saturation (%)")
     pain_score: Optional[int] = Field(None, description="Pain score (0-10)")
     
-    @validator('systolic_bp')
-    def validate_systolic_bp(cls, v):
+    @field_validator('systolic_bp')
+    @classmethod
+    def validate_systolic_bp(cls, v: int | None) -> int | None:
         if v is not None and (v < 70 or v > 250):
             raise ValueError("Systolic BP must be between 70-250 mmHg")
         return v
     
-    @validator('diastolic_bp')
-    def validate_diastolic_bp(cls, v):
+    @field_validator('diastolic_bp')
+    @classmethod
+    def validate_diastolic_bp(cls, v: int | None) -> int | None:
         if v is not None and (v < 40 or v > 150):
             raise ValueError("Diastolic BP must be between 40-150 mmHg")
         return v
     
-    @validator('heart_rate')
-    def validate_heart_rate(cls, v):
+    @field_validator('heart_rate')
+    @classmethod
+    def validate_heart_rate(cls, v: int | None) -> int | None:
         if v is not None and (v < 30 or v > 200):
             raise ValueError("Heart rate must be between 30-200 bpm")
         return v
@@ -219,11 +223,11 @@ class QualityMeasure(BaseModel):
     target: Optional[float] = Field(None, description="Target percentage")
     period: str = Field(..., description="Measurement period")
     
-    @validator('percentage', always=True)
-    def calculate_percentage(cls, v, values):
-        if 'numerator' in values and 'denominator' in values and values['denominator'] > 0:
-            return (values['numerator'] / values['denominator']) * 100
-        return 0.0
+    @model_validator(mode='after')
+    def calculate_percentage(self):
+        if self.denominator > 0:
+            self.percentage = (self.numerator / self.denominator) * 100
+        return self
 
 
 class ClinicalTrial(BaseModel):

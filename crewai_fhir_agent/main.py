@@ -6,6 +6,8 @@ Main application for running healthcare AI agents with FHIR integration
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Dict, Any
 from dotenv import load_dotenv
 import uvicorn
@@ -17,7 +19,6 @@ from pydantic import BaseModel
 import sys
 
 # Add shared modules to path
-import os
 shared_path = os.path.join(os.path.dirname(__file__), '..', 'shared')
 if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
@@ -28,10 +29,7 @@ try:
     from fhir_client import FHIRConfig
     from healthcare_models import PatientSummary, ClinicalAssessment
 except ImportError as e:
-    # Fallback: try direct import
     print(f"Import error: {e}")
-    print(f"Python path: {sys.path}")
-    # Create minimal classes if shared modules aren't available
     class FHIRConfig:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
@@ -53,24 +51,52 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global variables
+agent_manager: "HealthcareAgentManager | None" = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: initialize and cleanup resources."""
+    global agent_manager
+    try:
+        fhir_config = FHIRConfig(
+            base_url=os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir/"),
+            client_id=os.getenv("FHIR_CLIENT_ID", "healthcare_ai_agent"),
+            client_secret=os.getenv("FHIR_CLIENT_SECRET"),
+            scopes=["patient/*.read", "user/*.read", "offline_access"]
+        )
+        api_key = os.getenv("OPENAI_API_KEY", "demo_key_for_testing")
+        agent_manager = HealthcareAgentManager(
+            openai_api_key=api_key,
+            fhir_config=fhir_config
+        )
+        logger.info("CrewAI Healthcare Agent System initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize agent system: {e}")
+        raise
+    yield
+
+
 # FastAPI app setup
 app = FastAPI(
     title="CrewAI Healthcare FHIR Agent System",
     description="AI-powered healthcare agents with FHIR integration using CrewAI framework",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3030").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Create reports directory if it doesn't exist
-import os
 reports_dir = os.path.join(os.path.dirname(__file__), "reports")
 os.makedirs(reports_dir, exist_ok=True)
 
@@ -79,9 +105,6 @@ app.mount("/static/reports", StaticFiles(directory=reports_dir), name="reports")
 
 # Security
 security = HTTPBearer()
-
-# Global variables
-agent_manager: HealthcareAgentManager = None
 
 
 class AssessmentRequest(BaseModel):
@@ -126,39 +149,22 @@ class PDFGenerationResponse(BaseModel):
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate authentication token"""
-    # In production, implement proper JWT validation
-    if not credentials.credentials:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    return {"user_id": "healthcare_provider", "role": "physician"}
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the healthcare agent manager on startup"""
-    global agent_manager
-    
+    """Validate authentication token using JWT."""
+    jwt_secret = os.getenv("JWT_SECRET_KEY")
+    if not jwt_secret:
+        logger.warning("JWT_SECRET_KEY not set – accepting any token (dev mode)")
+        return {"user_id": "healthcare_provider", "role": "physician"}
     try:
-        # Configure FHIR client
-        fhir_config = FHIRConfig(
-            base_url=os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir/"),
-            client_id=os.getenv("FHIR_CLIENT_ID", "healthcare_ai_agent"),
-            client_secret=os.getenv("FHIR_CLIENT_SECRET"),
-            scopes=["patient/*.read", "user/*.read", "offline_access"]
+        from jose import jwt as jose_jwt, JWTError
+        payload = jose_jwt.decode(
+            credentials.credentials, jwt_secret, algorithms=["HS256"]
         )
-        
-        # Initialize agent manager with demo key if none provided
-        api_key = os.getenv("OPENAI_API_KEY", "demo_key_for_testing")
-        agent_manager = HealthcareAgentManager(
-            openai_api_key=api_key,
-            fhir_config=fhir_config
-        )
-        
-        logger.info("CrewAI Healthcare Agent System initialized successfully")
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize agent system: {e}")
-        raise
+        return {
+            "user_id": payload.get("sub", "unknown"),
+            "role": payload.get("role", "physician"),
+        }
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @app.get("/")
@@ -182,7 +188,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "services": {
             "fhir_client": "connected",
             "ai_agents": "ready",
@@ -223,7 +229,8 @@ async def run_comprehensive_assessment(
         
     except Exception as e:
         logger.error(f"Assessment failed for patient {request.patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Assessment failed: {str(e)}")
+        logger.exception("Assessment failed")
+        raise HTTPException(status_code=500, detail="Assessment failed. Check server logs for details.")
 
 
 @app.post("/assessment/emergency")
@@ -263,7 +270,8 @@ async def run_emergency_assessment(
         
     except Exception as e:
         logger.error(f"Emergency assessment failed for patient {request.patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Emergency assessment failed: {str(e)}")
+        logger.exception("Emergency assessment failed")
+        raise HTTPException(status_code=500, detail="Emergency assessment failed. Check server logs for details.")
 
 
 @app.post("/assessment/medication-reconciliation")
@@ -299,7 +307,8 @@ async def run_medication_reconciliation(
         
     except Exception as e:
         logger.error(f"Medication reconciliation failed for patient {request.patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Medication reconciliation failed: {str(e)}")
+        logger.exception("Medication reconciliation failed")
+        raise HTTPException(status_code=500, detail="Medication reconciliation failed. Check server logs for details.")
 
 
 @app.get("/patient/{patient_id}/summary")
@@ -330,7 +339,8 @@ async def get_patient_summary(
         
     except Exception as e:
         logger.error(f"Failed to retrieve patient summary for {patient_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve patient data: {str(e)}")
+        logger.exception("Failed to retrieve patient data")
+        raise HTTPException(status_code=500, detail="Failed to retrieve patient data. Check server logs for details.")
 
 
 @app.get("/agents/status")
@@ -521,7 +531,8 @@ async def run_comprehensive_assessment_compat(
             
             logger.error(f"Tracked error: {error_type} ({error_code}) - {error_message}")
         
-        raise HTTPException(status_code=500, detail=f"Assessment failed: {str(e)}")
+        logger.exception("Assessment failed")
+        raise HTTPException(status_code=500, detail="Assessment failed. Check server logs for details.")
 
 
 @app.post("/emergency")  

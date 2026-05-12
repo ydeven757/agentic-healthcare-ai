@@ -36,12 +36,9 @@ class HealthcareFunctionRegistry:
     def get_patient_data(self, patient_id: str) -> str:
         """Retrieve comprehensive patient data from FHIR server"""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            patient_data = loop.run_until_complete(
+            patient_data = asyncio.run(
                 self.fhir_client.get_comprehensive_patient_data(patient_id)
             )
-            loop.close()
             
             return json.dumps({
                 "patient_id": patient_id,

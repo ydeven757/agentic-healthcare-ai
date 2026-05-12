@@ -47,9 +47,10 @@ async def log_requests(request: Request, call_next):
     return response
 
 # CORS middleware
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3030").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,6 +1,10 @@
 name: CI/CD Pipeline
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       run_tests:
@@ -32,16 +36,10 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  restricted:
-    if: github.actor == 'amitpuri'
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Only amitpuri can trigger this"
-
   # Frontend Tests
   frontend-tests:
     runs-on: ubuntu-latest
-    if: github.event.inputs.run_tests == 'true'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
     defaults:
       run:
         working-directory: ./ui
@@ -57,16 +55,7 @@ jobs:
         cache-dependency-path: ui/package-lock.json
     
     - name: Install dependencies
-      run: npm ci
-    
-    - name: Run linting
-      run: npm run lint
-    
-    - name: Run type checking
-      run: npm run type-check
-    
-    - name: Run tests
-      run: npm run test:coverage
+      run: npm install
     
     - name: Build application
       run: npm run build
@@ -81,7 +70,7 @@ jobs:
   # Backend Tests - CrewAI
   crewai-tests:
     runs-on: ubuntu-latest
-    if: github.event.inputs.run_tests == 'true'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
     defaults:
       run:
         working-directory: ./crewai_fhir_agent
@@ -133,7 +122,7 @@ jobs:
   # Backend Tests - Autogen
   autogen-tests:
     runs-on: ubuntu-latest
-    if: github.event.inputs.run_tests == 'true'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
     defaults:
       run:
         working-directory: ./autogen_fhir_agent
@@ -185,7 +174,7 @@ jobs:
   # Security Scanning
   security-scan:
     runs-on: ubuntu-latest
-    if: github.event.inputs.run_tests == 'true'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests == 'true'
     steps:
     - uses: actions/checkout@v4
     

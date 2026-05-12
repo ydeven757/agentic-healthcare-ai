@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="FHIR Proxy Service", description="Proxy service to handle FHIR requests with CORS support")
 
 # Add CORS middleware
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3030").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,10 +46,12 @@ async def get_metadata(fhir_url: Optional[str] = None):
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Patient")
 async def search_patients(fhir_url: Optional[str] = None, name: Optional[str] = None, _count: Optional[int] = 20):
@@ -67,10 +70,12 @@ async def search_patients(fhir_url: Optional[str] = None, name: Optional[str] = 
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Patient/{patient_id}")
 async def get_patient(patient_id: str, fhir_url: Optional[str] = None):
@@ -84,12 +89,14 @@ async def get_patient(patient_id: str, fhir_url: Optional[str] = None):
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Patient/{patient_id}/Condition")
 async def get_patient_conditions(patient_id: str, fhir_url: Optional[str] = None):
@@ -103,10 +110,12 @@ async def get_patient_conditions(patient_id: str, fhir_url: Optional[str] = None
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Patient/{patient_id}/MedicationStatement")
 async def get_patient_medications(patient_id: str, fhir_url: Optional[str] = None):
@@ -120,10 +129,12 @@ async def get_patient_medications(patient_id: str, fhir_url: Optional[str] = Non
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Patient/{patient_id}/Observation")
 async def get_patient_observations(patient_id: str, fhir_url: Optional[str] = None):
@@ -137,10 +148,12 @@ async def get_patient_observations(patient_id: str, fhir_url: Optional[str] = No
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Condition")
 async def search_conditions(request: Request, fhir_url: Optional[str] = None):
@@ -158,10 +171,12 @@ async def search_conditions(request: Request, fhir_url: Optional[str] = None):
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/MedicationRequest")
 async def search_medication_requests(request: Request, fhir_url: Optional[str] = None):
@@ -179,10 +194,12 @@ async def search_medication_requests(request: Request, fhir_url: Optional[str] =
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/Observation")
 async def search_observations(request: Request, fhir_url: Optional[str] = None):
@@ -200,10 +217,12 @@ async def search_observations(request: Request, fhir_url: Optional[str] = None):
             return response.json()
     except httpx.RequestError as e:
         logger.error(f"Network error connecting to FHIR server: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to connect to FHIR server: {str(e)}")
+        logger.exception("Failed to connect to FHIR server")
+        raise HTTPException(status_code=503, detail="Failed to connect to FHIR server")
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error from FHIR server: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"FHIR server error: {str(e)}")
+        logger.error(f"FHIR server returned error: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="FHIR server error")
 
 @app.get("/fhir/test-connection")
 async def test_fhir_connection(fhir_url: Optional[str] = None):

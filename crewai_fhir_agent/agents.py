@@ -37,12 +37,9 @@ class FHIRPatientTool(BaseTool):
     def _run(self, patient_id: str) -> str:
         """Retrieve comprehensive patient data via MCP"""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
+            result = asyncio.run(
                 self.fhir_tools.get_patient_for_assessment(patient_id)
             )
-            loop.close()
             return result
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)}, indent=2)
@@ -174,12 +171,9 @@ class FHIREncounterTool(BaseTool):
     def _run(self, encounter_id: str) -> str:
         """Retrieve encounter analysis via MCP"""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
+            result = asyncio.run(
                 self.fhir_tools.get_encounter_for_analysis(encounter_id)
             )
-            loop.close()
             return result
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)}, indent=2)
@@ -199,12 +193,9 @@ class FHIRVitalSignsTool(BaseTool):
     def _run(self, patient_id: str, days: str = "30") -> str:
         """Retrieve vital signs trends via MCP"""
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
+            result = asyncio.run(
                 self.fhir_tools.get_vital_signs_trends(patient_id, int(days))
             )
-            loop.close()
             return result
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)}, indent=2)
@@ -224,24 +215,20 @@ class PDFAssessmentReportTool(BaseTool):
     def _run(self, patient_id: str, assessment_data: str = "", filename: str = "") -> str:
         """Generate PDF assessment report"""
         try:
-            # Parse assessment data if provided
             parsed_assessment = None
             if assessment_data:
                 try:
                     parsed_assessment = json.loads(assessment_data)
-                except:
+                except json.JSONDecodeError:
                     parsed_assessment = {"ai_assessment_summary": assessment_data}
             
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(
+            result = asyncio.run(
                 self.fhir_tools.generate_assessment_pdf(
                     patient_id, 
                     parsed_assessment, 
                     filename if filename else None
                 )
             )
-            loop.close()
             return result
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)}, indent=2)
