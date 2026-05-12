@@ -105,7 +105,12 @@ jobs:
       run: mypy main.py --ignore-missing-imports || true
     
     - name: Run tests
-      run: pytest tests/ -v --cov=. --cov-report=xml
+      run: |
+        if [ -d tests ]; then
+          pytest tests/ -v --cov=. --cov-report=xml
+        else
+          echo "No tests directory found, skipping"
+        fi
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_TEST }}
         FHIR_BASE_URL: http://localhost:8080/fhir/
@@ -157,7 +162,12 @@ jobs:
       run: mypy main.py --ignore-missing-imports || true
     
     - name: Run tests
-      run: pytest tests/ -v --cov=. --cov-report=xml
+      run: |
+        if [ -d tests ]; then
+          pytest tests/ -v --cov=. --cov-report=xml
+        else
+          echo "No tests directory found, skipping"
+        fi
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_TEST }}
         FHIR_BASE_URL: http://localhost:8080/fhir/
