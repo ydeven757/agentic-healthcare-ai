@@ -41,9 +41,12 @@ class HealthcareFunctionRegistry:
     def get_patient_data(self, patient_id: str) -> str:
         """Retrieve comprehensive patient data from FHIR server"""
         try:
-            patient_data = asyncio.run(
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            patient_data = loop.run_until_complete(
                 self.fhir_client.get_comprehensive_patient_data(patient_id)
             )
+            loop.close()
 
             return json.dumps(
                 {
@@ -542,6 +545,7 @@ class HealthcareAutogenSystem:
         """Initialize the healthcare agent system"""
         self.fhir_client = FHIRClient(fhir_config)
         self.function_registry = HealthcareFunctionRegistry(self.fhir_client, mcp_url)
+        self.mcp_url = mcp_url
         self.config_list = [{"model": "gpt-4", "api_key": openai_api_key}]
 
         self.primary_care_agent = None

@@ -253,7 +253,7 @@ async def execute_autogen_scenario(
 
     active_scenarios[scenario_id] = {
         "status": "running",
-        "start_time": datetime.now().isoformat(),
+        "start_time": datetime.now(),
         "framework": "autogen",
         "scenario_type": scenario_type,
         "patient_id": request.patient_id,
@@ -367,7 +367,7 @@ async def execute_crewai_scenario(
 
     active_scenarios[scenario_id] = {
         "status": "running",
-        "start_time": datetime.now().isoformat(),
+        "start_time": datetime.now(),
         "framework": "crewai",
         "scenario_type": scenario_type,
         "patient_id": request.patient_id,
