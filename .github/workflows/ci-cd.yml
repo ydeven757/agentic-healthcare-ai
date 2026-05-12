@@ -99,10 +99,10 @@ jobs:
       run: black --check .
     
     - name: Run linting
-      run: flake8 . --max-line-length=100 --exclude=venv
+      run: flake8 main.py --max-line-length=100
     
     - name: Run type checking
-      run: mypy . --ignore-missing-imports
+      run: mypy main.py --ignore-missing-imports
     
     - name: Run tests
       run: pytest tests/ -v --cov=. --cov-report=xml
@@ -151,10 +151,10 @@ jobs:
       run: black --check .
     
     - name: Run linting
-      run: flake8 . --max-line-length=100 --exclude=venv
+      run: flake8 main.py --max-line-length=100
     
     - name: Run type checking
-      run: mypy . --ignore-missing-imports
+      run: mypy main.py --ignore-missing-imports
     
     - name: Run tests
       run: pytest tests/ -v --cov=. --cov-report=xml

@@ -42,7 +42,7 @@ except ImportError as e:
         pass
 
 
-from agents import HealthcareAgentManager
+from agents import HealthcareAgentManager  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -165,7 +165,7 @@ async def get_current_user(
         logger.warning("JWT_SECRET_KEY not set – accepting any token (dev mode)")
         return {"user_id": "healthcare_provider", "role": "physician"}
     try:
-        from jose import jwt as jose_jwt, JWTError
+        from jose import jwt as jose_jwt
 
         payload = jose_jwt.decode(
             credentials.credentials, jwt_secret, algorithms=["HS256"]
@@ -319,7 +319,10 @@ async def run_medication_reconciliation(
 
         return {
             "status": "completed",
-            "reconciliation_id": f"medrec_{request.patient_id}_{int(asyncio.get_event_loop().time())}",
+            "reconciliation_id": (
+                f"medrec_{request.patient_id}"
+                f"_{int(asyncio.get_event_loop().time())}"
+            ),
             "patient_id": request.patient_id,
             "assessment_type": "medication_reconciliation",
             "results": result,
@@ -429,7 +432,8 @@ async def generate_assessment_pdf(
     """Generate PDF assessment report using AI agents"""
     try:
         logger.info(
-            f"Generating PDF for patient {request.patient_id}, assessment type: {request.assessment_type}"
+            f"Generating PDF for patient {request.patient_id}, "
+            f"assessment type: {request.assessment_type}"
         )
 
         if not agent_manager:
@@ -701,7 +705,8 @@ async def log_assessment_completion(
 ):
     """Background task to log assessment completion"""
     logger.info(
-        f"Assessment completed: {assessment_type} for patient {patient_id} by provider {provider_id}"
+        f"Assessment completed: {assessment_type} "
+        f"for patient {patient_id} by provider {provider_id}"
     )
     # In production, this would write to audit logs or database
 

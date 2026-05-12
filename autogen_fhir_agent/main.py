@@ -51,7 +51,7 @@ except ImportError as e:
         pass
 
 
-from agents import HealthcareAutogenSystem
+from agents import HealthcareAutogenSystem  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -91,7 +91,10 @@ async def lifespan(app: FastAPI):
 # FastAPI app setup
 app = FastAPI(
     title="Autogen Healthcare FHIR Agent System",
-    description="Multi-agent conversational AI for healthcare with FHIR integration using Autogen framework",
+    description=(
+        "Multi-agent conversational AI for healthcare"
+        " with FHIR integration using Autogen framework"
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -190,7 +193,7 @@ async def get_current_user(
         logger.warning("JWT_SECRET_KEY not set – accepting any token (dev mode)")
         return {"user_id": "healthcare_provider", "role": "physician"}
     try:
-        from jose import jwt as jose_jwt, JWTError
+        from jose import jwt as jose_jwt
 
         payload = jose_jwt.decode(
             credentials.credentials, jwt_secret, algorithms=["HS256"]
@@ -232,7 +235,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": "2024-01-01T00:00:00Z",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "services": {
             "fhir_client": "connected",
             "autogen_agents": "ready",
@@ -565,7 +568,8 @@ async def generate_assessment_pdf(
     """Generate PDF assessment report using AI agents"""
     try:
         logger.info(
-            f"Generating PDF for patient {request.patient_id}, assessment type: {request.assessment_type}"
+            f"Generating PDF for patient {request.patient_id}, "
+            f"assessment type: {request.assessment_type}"
         )
 
         if not autogen_system:
@@ -849,7 +853,8 @@ async def log_conversation_completion(
 ):
     """Background task to log conversation completion"""
     logger.info(
-        f"Conversation completed: {conversation_type} (ID: {conversation_id}) by provider {provider_id}"
+        f"Conversation completed: {conversation_type} "
+        f"(ID: {conversation_id}) by provider {provider_id}"
     )
     # In production, this would write to audit logs or database
 
