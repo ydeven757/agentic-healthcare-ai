@@ -11,7 +11,15 @@ from datetime import datetime
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, WebSocket, WebSocketDisconnect, Header
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends,
+    BackgroundTasks,
+    WebSocket,
+    WebSocketDisconnect,
+    Header,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -20,26 +28,29 @@ import json
 import sys
 
 # Add shared modules to path
-shared_path = os.path.join(os.path.dirname(__file__), '..', 'shared')
+shared_path = os.path.join(os.path.dirname(__file__), "..", "shared")
 if shared_path not in sys.path:
     sys.path.insert(0, shared_path)
-if '/app/shared' not in sys.path:
-    sys.path.insert(0, '/app/shared')
+if "/app/shared" not in sys.path:
+    sys.path.insert(0, "/app/shared")
 
 try:
     from fhir_client import FHIRConfig
     from healthcare_models import PatientSummary, ClinicalAssessment
 except ImportError as e:
     print(f"Import error: {e}")
+
     class FHIRConfig:
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
-    
+
     class PatientSummary:
         pass
-    
+
     class ClinicalAssessment:
         pass
+
+
 from agents import HealthcareAutogenSystem
 
 # Load environment variables
@@ -47,8 +58,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -61,13 +71,13 @@ active_connections: List[WebSocket] = []
 async def lifespan(app: FastAPI):
     """Application lifespan: initialize and cleanup resources."""
     global autogen_system
-    load_dotenv(dotenv_path='../.env')
+    load_dotenv(dotenv_path="../.env")
     try:
         fhir_config = FHIRConfig(
             base_url=os.getenv("FHIR_BASE_URL", "http://localhost:8080/fhir/"),
             client_id=os.getenv("FHIR_CLIENT_ID", "autogen_healthcare_ai"),
             client_secret=os.getenv("FHIR_CLIENT_SECRET"),
-            scopes=["patient/*.read", "user/*.read", "offline_access"]
+            scopes=["patient/*.read", "user/*.read", "offline_access"],
         )
         api_key = os.getenv("OPENAI_API_KEY", "demo_key_for_testing")
         autogen_system = HealthcareAutogenSystem(api_key, fhir_config)
@@ -109,8 +119,11 @@ security = HTTPBearer()
 
 class ConversationRequest(BaseModel):
     """Request model for starting a healthcare conversation"""
+
     patient_id: str
-    conversation_type: str = "comprehensive"  # comprehensive, emergency, medication_review
+    conversation_type: str = (
+        "comprehensive"  # comprehensive, emergency, medication_review
+    )
     chief_complaint: str = None
     urgency: str = "routine"
     context: Dict[str, Any] = None
@@ -118,6 +131,7 @@ class ConversationRequest(BaseModel):
 
 class EmergencyConversationRequest(BaseModel):
     """Request model for emergency conversation"""
+
     patient_id: str
     chief_complaint: str
     vital_signs: Dict[str, Any] = None
@@ -126,13 +140,17 @@ class EmergencyConversationRequest(BaseModel):
 
 class MedicationReviewRequest(BaseModel):
     """Request model for medication review conversation"""
+
     patient_id: str
-    review_type: str = "reconciliation"  # reconciliation, interaction_check, optimization
+    review_type: str = (
+        "reconciliation"  # reconciliation, interaction_check, optimization
+    )
     context: str = None  # admission, discharge, routine
 
 
 class ConversationResponse(BaseModel):
     """Response model for conversation results"""
+
     conversation_id: str
     patient_id: str
     conversation_type: str
@@ -145,6 +163,7 @@ class ConversationResponse(BaseModel):
 
 class PDFGenerationRequest(BaseModel):
     """Request model for PDF generation"""
+
     patient_id: str
     assessment_type: str = "comprehensive"
     assessment_data: Dict[str, Any]
@@ -154,6 +173,7 @@ class PDFGenerationRequest(BaseModel):
 
 class PDFGenerationResponse(BaseModel):
     """Response model for PDF generation"""
+
     success: bool
     pdfPath: str = None
     filename: str = None
@@ -161,7 +181,9 @@ class PDFGenerationResponse(BaseModel):
     error: str = None
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
     """Validate authentication token using JWT."""
     jwt_secret = os.getenv("JWT_SECRET_KEY")
     if not jwt_secret:
@@ -169,6 +191,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return {"user_id": "healthcare_provider", "role": "physician"}
     try:
         from jose import jwt as jose_jwt, JWTError
+
         payload = jose_jwt.decode(
             credentials.credentials, jwt_secret, algorithms=["HS256"]
         )
@@ -191,16 +214,16 @@ async def root():
         "agents": [
             "Primary Care Physician",
             "Cardiologist",
-            "Clinical Pharmacist", 
+            "Clinical Pharmacist",
             "Nurse Care Coordinator",
-            "Emergency Physician"
+            "Emergency Physician",
         ],
         "features": [
             "Multi-agent conversations",
             "FHIR integration",
             "Real-time collaboration",
-            "Clinical decision support"
-        ]
+            "Clinical decision support",
+        ],
     }
 
 
@@ -213,9 +236,9 @@ async def health_check():
         "services": {
             "fhir_client": "connected",
             "autogen_agents": "ready",
-            "conversation_engine": "active"
+            "conversation_engine": "active",
         },
-        "active_connections": len(active_connections)
+        "active_connections": len(active_connections),
     }
 
 
@@ -223,25 +246,29 @@ async def health_check():
 async def start_comprehensive_conversation(
     request: ConversationRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Start comprehensive patient assessment conversation"""
     try:
-        logger.info(f"Starting comprehensive conversation for patient {request.patient_id}")
-        
+        logger.info(
+            f"Starting comprehensive conversation for patient {request.patient_id}"
+        )
+
         # Run comprehensive assessment with multi-agent conversation
         result = await autogen_system.run_comprehensive_assessment(request.patient_id)
-        
-        conversation_id = f"comp_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
-        
+
+        conversation_id = (
+            f"comp_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
+        )
+
         # Log conversation completion
         background_tasks.add_task(
             log_conversation_completion,
             conversation_id,
             "comprehensive",
-            current_user["user_id"]
+            current_user["user_id"],
         )
-        
+
         return ConversationResponse(
             conversation_id=conversation_id,
             patient_id=request.patient_id,
@@ -250,44 +277,51 @@ async def start_comprehensive_conversation(
             participants=result["participating_agents"],
             summary=result["summary"],
             full_conversation=result["conversation_history"],
-            timestamp=result["timestamp"]
+            timestamp=result["timestamp"],
         )
-        
+
     except Exception as e:
         import traceback
+
         error_details = traceback.format_exc()
-        logger.error(f"Comprehensive conversation failed for patient {request.patient_id}: {e}")
+        logger.error(
+            f"Comprehensive conversation failed for patient {request.patient_id}: {e}"
+        )
         logger.error(f"Full error traceback: {error_details}")
         logger.exception("Conversation failed")
-        raise HTTPException(status_code=500, detail="Conversation failed. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Conversation failed. Check server logs for details.",
+        )
 
 
 @app.post("/conversation/emergency", response_model=ConversationResponse)
 async def start_emergency_conversation(
     request: EmergencyConversationRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Start emergency assessment conversation"""
     try:
         logger.info(f"Starting emergency conversation for patient {request.patient_id}")
-        
+
         # Run emergency assessment
         result = await autogen_system.run_emergency_assessment(
-            request.patient_id,
-            request.chief_complaint
+            request.patient_id, request.chief_complaint
         )
-        
-        conversation_id = f"emerg_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
-        
+
+        conversation_id = (
+            f"emerg_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
+        )
+
         # Log conversation completion
         background_tasks.add_task(
             log_conversation_completion,
             conversation_id,
             "emergency",
-            current_user["user_id"]
+            current_user["user_id"],
         )
-        
+
         return ConversationResponse(
             conversation_id=conversation_id,
             patient_id=request.patient_id,
@@ -296,38 +330,45 @@ async def start_emergency_conversation(
             participants=result["participating_agents"],
             summary=result["summary"],
             full_conversation=result["conversation_history"],
-            timestamp=result["timestamp"]
+            timestamp=result["timestamp"],
         )
-        
+
     except Exception as e:
-        logger.error(f"Emergency conversation failed for patient {request.patient_id}: {e}")
+        logger.error(
+            f"Emergency conversation failed for patient {request.patient_id}: {e}"
+        )
         logger.exception("Emergency conversation failed")
-        raise HTTPException(status_code=500, detail="Emergency conversation failed. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Emergency conversation failed. Check server logs for details.",
+        )
 
 
 @app.post("/conversation/medication-review", response_model=ConversationResponse)
 async def start_medication_review_conversation(
     request: MedicationReviewRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Start medication review conversation"""
     try:
         logger.info(f"Starting medication review for patient {request.patient_id}")
-        
+
         # Run medication reconciliation
         result = await autogen_system.run_medication_reconciliation(request.patient_id)
-        
-        conversation_id = f"medrec_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
-        
+
+        conversation_id = (
+            f"medrec_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
+        )
+
         # Log conversation completion
         background_tasks.add_task(
             log_conversation_completion,
             conversation_id,
             "medication_review",
-            current_user["user_id"]
+            current_user["user_id"],
         )
-        
+
         return ConversationResponse(
             conversation_id=conversation_id,
             patient_id=request.patient_id,
@@ -336,29 +377,31 @@ async def start_medication_review_conversation(
             participants=result["participating_agents"],
             summary=result["summary"],
             full_conversation=result["conversation_history"],
-            timestamp=result["timestamp"]
+            timestamp=result["timestamp"],
         )
-        
+
     except Exception as e:
         logger.error(f"Medication review failed for patient {request.patient_id}: {e}")
         logger.exception("Medication review failed")
-        raise HTTPException(status_code=500, detail="Medication review failed. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Medication review failed. Check server logs for details.",
+        )
 
 
 @app.get("/patient/{patient_id}/summary")
 async def get_patient_summary(
-    patient_id: str,
-    current_user: dict = Depends(get_current_user)
+    patient_id: str, current_user: dict = Depends(get_current_user)
 ):
     """Get patient summary from FHIR"""
     try:
         # Use the function registry to get patient data
         patient_data_str = autogen_system.function_registry.get_patient_data(patient_id)
         patient_data = json.loads(patient_data_str)
-        
+
         if "error" in patient_data:
             raise HTTPException(status_code=500, detail=patient_data["error"])
-        
+
         return {
             "patient_id": patient_id,
             "demographics": patient_data["demographics"],
@@ -366,18 +409,21 @@ async def get_patient_summary(
                 "active_conditions": len(patient_data.get("conditions", [])),
                 "current_medications": len(patient_data.get("medications", [])),
                 "recent_vital_signs": len(patient_data.get("vital_signs", [])),
-                "recent_lab_results": len(patient_data.get("lab_results", []))
+                "recent_lab_results": len(patient_data.get("lab_results", [])),
             },
             "conditions": patient_data.get("conditions", []),
             "medications": patient_data.get("medications", []),
             "vital_signs": patient_data.get("vital_signs", [])[:5],  # Most recent 5
-            "lab_results": patient_data.get("lab_results", [])[:5]   # Most recent 5
+            "lab_results": patient_data.get("lab_results", [])[:5],  # Most recent 5
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to retrieve patient summary for {patient_id}: {e}")
         logger.exception("Failed to retrieve patient data")
-        raise HTTPException(status_code=500, detail="Failed to retrieve patient data. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve patient data. Check server logs for details.",
+        )
 
 
 @app.get("/agents/status")
@@ -394,29 +440,29 @@ async def get_agent_status(current_user: dict = Depends(get_current_user)):
                     "Patient data retrieval",
                     "Risk score calculation",
                     "Care plan generation",
-                    "Clinical assessment"
-                ]
+                    "Clinical assessment",
+                ],
             },
             {
-                "name": "Cardiologist", 
+                "name": "Cardiologist",
                 "role": "Cardiovascular risk assessment and recommendations",
                 "status": "active",
                 "capabilities": [
                     "Cardiovascular risk assessment",
                     "Cardiac condition evaluation",
-                    "Treatment recommendations"
-                ]
+                    "Treatment recommendations",
+                ],
             },
             {
                 "name": "Clinical Pharmacist",
                 "role": "Medication safety and optimization",
-                "status": "active", 
+                "status": "active",
                 "capabilities": [
                     "Drug interaction checking",
                     "Medication reconciliation",
                     "Dosing optimization",
-                    "Safety monitoring"
-                ]
+                    "Safety monitoring",
+                ],
             },
             {
                 "name": "Nurse Care Coordinator",
@@ -426,8 +472,8 @@ async def get_agent_status(current_user: dict = Depends(get_current_user)):
                     "Care plan coordination",
                     "Patient education",
                     "Follow-up scheduling",
-                    "Resource coordination"
-                ]
+                    "Resource coordination",
+                ],
             },
             {
                 "name": "Emergency Physician",
@@ -437,17 +483,17 @@ async def get_agent_status(current_user: dict = Depends(get_current_user)):
                     "Rapid triage assessment",
                     "Emergency stabilization",
                     "Critical decision making",
-                    "Risk stratification"
-                ]
-            }
+                    "Risk stratification",
+                ],
+            },
         ],
         "conversation_types": [
             "comprehensive_assessment",
-            "emergency_evaluation", 
-            "medication_reconciliation"
+            "emergency_evaluation",
+            "medication_reconciliation",
         ],
         "total_agents": 5,
-        "active_conversations": 0
+        "active_conversations": 0,
     }
 
 
@@ -456,30 +502,31 @@ async def websocket_conversation(websocket: WebSocket, patient_id: str):
     """WebSocket endpoint for real-time conversation monitoring"""
     await websocket.accept()
     active_connections.append(websocket)
-    
+
     try:
         while True:
             # Wait for conversation initiation
             data = await websocket.receive_text()
             message = json.loads(data)
-            
+
             conversation_type = message.get("type", "comprehensive")
-            
+
             # Start appropriate conversation based on type
             if conversation_type == "emergency":
                 chief_complaint = message.get("chief_complaint", "General assessment")
-                result = await autogen_system.run_emergency_assessment(patient_id, chief_complaint)
+                result = await autogen_system.run_emergency_assessment(
+                    patient_id, chief_complaint
+                )
             elif conversation_type == "medication":
                 result = await autogen_system.run_medication_reconciliation(patient_id)
             else:
                 result = await autogen_system.run_comprehensive_assessment(patient_id)
-            
+
             # Send conversation updates
-            await websocket.send_text(json.dumps({
-                "status": "completed",
-                "result": result
-            }))
-            
+            await websocket.send_text(
+                json.dumps({"status": "completed", "result": result})
+            )
+
     except WebSocketDisconnect:
         active_connections.remove(websocket)
         logger.info(f"WebSocket disconnected for patient {patient_id}")
@@ -489,7 +536,7 @@ async def websocket_conversation(websocket: WebSocket, patient_id: str):
 async def get_conversation_history(
     patient_id: str = None,
     limit: int = 10,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Get conversation history (placeholder - would integrate with database)"""
     # In production, this would query a database for conversation history
@@ -501,11 +548,11 @@ async def get_conversation_history(
                 "type": "comprehensive",
                 "timestamp": "2024-01-01T10:00:00Z",
                 "participants": ["PrimaryCarePhysician", "Cardiologist"],
-                "status": "completed"
+                "status": "completed",
             }
         ],
         "total": 1,
-        "limit": limit
+        "limit": limit,
     }
 
 
@@ -513,50 +560,51 @@ async def get_conversation_history(
 async def generate_assessment_pdf(
     request: PDFGenerationRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Generate PDF assessment report using AI agents"""
     try:
-        logger.info(f"Generating PDF for patient {request.patient_id}, assessment type: {request.assessment_type}")
-        
+        logger.info(
+            f"Generating PDF for patient {request.patient_id}, assessment type: {request.assessment_type}"
+        )
+
         if not autogen_system:
-            raise HTTPException(status_code=500, detail="Autogen system not initialized")
-        
+            raise HTTPException(
+                status_code=500, detail="Autogen system not initialized"
+            )
+
         # Use the PDF generation function from FHIR tools
         from fhir_tools import FHIRToolsForAgents
-        
+
         # Configure MCP URL (this should match the FHIR MCP server)
         mcp_url = os.getenv("FHIR_MCP_URL", "http://localhost:8003")
         fhir_tools = FHIRToolsForAgents(mcp_url=mcp_url)
-        
+
         # Generate the PDF using the FHIR tools
         pdf_result = await fhir_tools.generate_assessment_pdf(
             patient_id=request.patient_id,
             assessment_data=request.assessment_data,
             conversation_data=request.conversation_data,
-            filename=request.filename or f"assessment_{request.patient_id}_{request.assessment_type}.pdf"
+            filename=request.filename
+            or f"assessment_{request.patient_id}_{request.assessment_type}.pdf",
         )
-        
+
         if pdf_result.get("success"):
             # Return the file path and metadata
             return PDFGenerationResponse(
                 success=True,
                 pdfPath=pdf_result.get("file_path"),
                 filename=pdf_result.get("filename"),
-                size=pdf_result.get("file_size", 0)
+                size=pdf_result.get("file_size", 0),
             )
         else:
             return PDFGenerationResponse(
-                success=False,
-                error=pdf_result.get("error", "Failed to generate PDF")
+                success=False, error=pdf_result.get("error", "Failed to generate PDF")
             )
-        
+
     except Exception as e:
         logger.error(f"Error generating PDF: {e}")
-        return PDFGenerationResponse(
-            success=False,
-            error=str(e)
-        )
+        return PDFGenerationResponse(success=False, error=str(e))
 
 
 # Frontend-compatible endpoints (match the paths expected by the UI)
@@ -565,25 +613,29 @@ async def run_comprehensive_conversation_compat(
     request: ConversationRequest,
     background_tasks: BackgroundTasks,
     authorization: str = Header(None),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Frontend-compatible comprehensive conversation endpoint with custom API key support"""
     from llm_communication_tracker import get_tracker, LLMProvider, AgentFramework
     import time
-    
+
     tracker = get_tracker()
     comm_id = None
     start_time = time.time()
-    
+
     try:
-        logger.info(f"Starting comprehensive conversation for patient {request.patient_id}")
-        
+        logger.info(
+            f"Starting comprehensive conversation for patient {request.patient_id}"
+        )
+
         # Extract API key from Authorization header if provided
         api_key = None
         if authorization and authorization.startswith("Bearer "):
             api_key = authorization[7:]  # Remove "Bearer " prefix
-            logger.info(f"Using API key from request header: {api_key[:10]}...{api_key[-4:]}")
-        
+            logger.info(
+                f"Using API key from request header: {api_key[:10]}...{api_key[-4:]}"
+            )
+
         # Start tracking the conversation
         comm_id = tracker.start_communication(
             agent_id="autogen_comprehensive_system",
@@ -593,25 +645,32 @@ async def run_comprehensive_conversation_compat(
             provider=LLMProvider.OPENAI,
             model="gpt-4",
             patient_id=request.patient_id,
-            scenario_type="comprehensive_assessment"
+            scenario_type="comprehensive_assessment",
         )
-        
+
         # Use provided API key or fall back to environment/default
         if api_key and api_key != os.getenv("OPENAI_API_KEY", ""):
             # Create a temporary AutoGen system with the custom API key
             from agents import HealthcareAutogenSystem
+
             temp_autogen_system = HealthcareAutogenSystem(
                 openai_api_key=api_key,
                 fhir_config=autogen_system.fhir_client.config,
-                mcp_url=autogen_system.mcp_url
+                mcp_url=autogen_system.mcp_url,
             )
-            result = await temp_autogen_system.run_comprehensive_assessment(request.patient_id)
+            result = await temp_autogen_system.run_comprehensive_assessment(
+                request.patient_id
+            )
         else:
             # Use the default system instance
-            result = await autogen_system.run_comprehensive_assessment(request.patient_id)
-        
-        conversation_id = f"comp_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
-        
+            result = await autogen_system.run_comprehensive_assessment(
+                request.patient_id
+            )
+
+        conversation_id = (
+            f"comp_{request.patient_id}_{int(asyncio.get_event_loop().time())}"
+        )
+
         # Complete successful tracking
         if comm_id:
             response_time = int((time.time() - start_time) * 1000)
@@ -619,17 +678,17 @@ async def run_comprehensive_conversation_compat(
                 comm_id=comm_id,
                 final_response=str(result.get("summary", "")),
                 response_time_ms=response_time,
-                confidence_score=0.85
+                confidence_score=0.85,
             )
-        
+
         # Log conversation completion
         background_tasks.add_task(
             log_conversation_completion,
             conversation_id,
             "comprehensive",
-            current_user["user_id"]
+            current_user["user_id"],
         )
-        
+
         return ConversationResponse(
             conversation_id=conversation_id,
             patient_id=request.patient_id,
@@ -638,40 +697,48 @@ async def run_comprehensive_conversation_compat(
             participants=result["participating_agents"],
             summary=result["summary"],
             full_conversation=result["conversation_history"],
-            timestamp=result["timestamp"]
+            timestamp=result["timestamp"],
         )
-        
+
     except Exception as e:
         import traceback
+
         error_details = traceback.format_exc()
-        logger.error(f"Comprehensive conversation failed for patient {request.patient_id}: {e}")
+        logger.error(
+            f"Comprehensive conversation failed for patient {request.patient_id}: {e}"
+        )
         logger.error(f"Full error traceback: {error_details}")
-        
+
         # Track the error with detailed analysis
         if comm_id:
             response_time = int((time.time() - start_time) * 1000)
             error_message, error_type, error_code = tracker.parse_openai_error(e)
-            
+
             tracker.complete_communication(
                 comm_id=comm_id,
                 final_response="",
                 response_time_ms=response_time,
                 error_message=error_message,
                 error_type=error_type,
-                error_code=error_code
+                error_code=error_code,
             )
-            
-            logger.error(f"Tracked error: {error_type} ({error_code}) - {error_message}")
-        
+
+            logger.error(
+                f"Tracked error: {error_type} ({error_code}) - {error_message}"
+            )
+
         logger.exception("Conversation failed")
-        raise HTTPException(status_code=500, detail="Conversation failed. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Conversation failed. Check server logs for details.",
+        )
 
 
-@app.post("/emergency")  
+@app.post("/emergency")
 async def run_emergency_conversation_compat(
     request: EmergencyConversationRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Frontend-compatible emergency conversation endpoint"""
     return await start_emergency_conversation(request, background_tasks, current_user)
@@ -681,21 +748,23 @@ async def run_emergency_conversation_compat(
 async def run_medication_review_compat(
     request: MedicationReviewRequest,
     background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
 ):
     """Frontend-compatible medication review endpoint"""
-    return await start_medication_review_conversation(request, background_tasks, current_user)
+    return await start_medication_review_conversation(
+        request, background_tasks, current_user
+    )
 
 
 @app.get("/communications")
 async def get_communications():
     """Get agent communications history with detailed error tracking"""
     from llm_communication_tracker import get_tracker
-    
+
     try:
         tracker = get_tracker()
         communications = []
-        
+
         for comm in tracker.communications.values():
             comm_dict = {
                 "id": comm.id,
@@ -705,7 +774,9 @@ async def get_communications():
                 "provider": comm.provider.value,
                 "model": comm.model,
                 "sessionStart": comm.session_start.isoformat(),
-                "sessionEnd": comm.session_end.isoformat() if comm.session_end else None,
+                "sessionEnd": (
+                    comm.session_end.isoformat() if comm.session_end else None
+                ),
                 "patientId": comm.patient_id,
                 "scenarioType": comm.scenario_type,
                 "totalInputTokens": comm.total_input_tokens,
@@ -729,44 +800,39 @@ async def get_communications():
                         "content": msg.content,
                         "tokens": msg.tokens,
                         "functionCall": msg.function_call,
-                        "toolCalls": msg.tool_calls
+                        "toolCalls": msg.tool_calls,
                     }
                     for msg in comm.messages
-                ]
+                ],
             }
             communications.append(comm_dict)
-        
+
         return {
             "communications": communications,
             "total": len(communications),
-            "status": "success"
+            "status": "success",
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get communications: {e}")
-        return {
-            "communications": [],
-            "total": 0,
-            "status": "error",
-            "error": str(e)
-        }
+        return {"communications": [], "total": 0, "status": "error", "error": str(e)}
 
 
 @app.get("/communications/stats")
 async def get_communication_stats():
     """Get communication statistics with enhanced error tracking"""
     from llm_communication_tracker import get_tracker
-    
+
     try:
         tracker = get_tracker()
         stats = tracker.get_communication_stats()
-        
+
         # Add quota exceeded details
         quota_details = tracker.get_quota_exceeded_details()
         stats["quota_status"] = quota_details
-        
+
         return stats
-        
+
     except Exception as e:
         logger.error(f"Failed to get communication stats: {e}")
         return {
@@ -774,13 +840,17 @@ async def get_communication_stats():
             "completed": 0,
             "errors": 0,
             "status": "error",
-            "error": str(e)
+            "error": str(e),
         }
 
 
-async def log_conversation_completion(conversation_id: str, conversation_type: str, provider_id: str):
+async def log_conversation_completion(
+    conversation_id: str, conversation_type: str, provider_id: str
+):
     """Background task to log conversation completion"""
-    logger.info(f"Conversation completed: {conversation_type} (ID: {conversation_id}) by provider {provider_id}")
+    logger.info(
+        f"Conversation completed: {conversation_type} (ID: {conversation_id}) by provider {provider_id}"
+    )
     # In production, this would write to audit logs or database
 
 
@@ -791,5 +861,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8001,  # Different port from CrewAI version
         reload=True,
-        log_level="info"
+        log_level="info",
     )

@@ -5,7 +5,7 @@ import os
 import pytest
 from datetime import date, datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 
 from healthcare_models import (
     PatientDemographics,
@@ -24,8 +24,8 @@ class TestPatientDemographics:
             birth_date=date(1990, 1, 1),
             gender="male",
         )
-        expected_age = date.today().year - 1990 - (
-            (date.today().month, date.today().day) < (1, 1)
+        expected_age = (
+            date.today().year - 1990 - ((date.today().month, date.today().day) < (1, 1))
         )
         assert patient.age == expected_age
 
