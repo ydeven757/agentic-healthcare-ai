@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies
+ui/node_modules
+**/node_modules
+**/__pycache__
+**/*.pyc
+venv*/
+.venv/
+
+# Build artifacts
+ui/build
+ui/dist
+ui/coverage
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+docker/volumes/
+docker/logs/
+
+# Docs and non-essential files
+docs/
+*.md
+LICENSE
+.github/
+
+# Environment files
+.env
+.env.*
+!env.template
+
+# Test artifacts
+test-results/
+htmlcov/
+.coverage
+.pytest_cache/

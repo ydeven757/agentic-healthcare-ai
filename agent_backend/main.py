@@ -17,16 +17,16 @@ import uuid
 import httpx
 
 # Add shared modules to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'shared'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'autogen_fhir_agent'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'crewai_fhir_agent'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "autogen_fhir_agent"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "crewai_fhir_agent"))
 
 from llm_communication_tracker import (
-    LLMCommunicationTracker, 
-    AutoGenLLMWrapper, 
+    LLMCommunicationTracker,
+    AutoGenLLMWrapper,
     CrewAILLMWrapper,
     AgentFramework,
-    LLMProvider
+    LLMProvider,
 )
 from fhir_client import FHIRClient, FHIRConfig
 
@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Real AI Agent Backend", version="1.0.0")
 api_router = APIRouter(prefix="/api")
 
+
 # Add a logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -46,10 +47,12 @@ async def log_requests(request: Request, call_next):
     logger.info(f"Response status code: {response.status_code}")
     return response
 
+
 # CORS middleware
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3030").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[o.strip() for o in _allowed_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,11 +88,11 @@ class ScenarioConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     type: str
-    patient_id: str = Field(..., alias='patientId')
-    patient_name: str = Field(..., alias='patientName')
-    chief_complaint: Optional[str] = Field(None, alias='chiefComplaint')
-    urgency_level: str = Field("routine", alias='urgencyLevel')
-    additional_context: Optional[str] = Field(None, alias='additionalContext')
+    patient_id: str = Field(..., alias="patientId")
+    patient_name: str = Field(..., alias="patientName")
+    chief_complaint: Optional[str] = Field(None, alias="chiefComplaint")
+    urgency_level: str = Field("routine", alias="urgencyLevel")
+    additional_context: Optional[str] = Field(None, alias="additionalContext")
 
 
 class AgentExecutionConfig(BaseModel):
@@ -124,7 +127,7 @@ async def health_check():
         "status": "healthy",
         "tracker_active": len(tracker.active_sessions),
         "total_communications": len(tracker.communications),
-        "frameworks_available": ["autogen", "crewai"]
+        "frameworks_available": ["autogen", "crewai"],
     }
 
 
@@ -162,13 +165,13 @@ async def get_communications():
                     "content": msg.content,
                     "tokens": msg.tokens,
                     "functionCall": msg.function_call,
-                    "toolCalls": msg.tool_calls
+                    "toolCalls": msg.tool_calls,
                 }
                 for msg in comm.messages
-            ]
+            ],
         }
         communications.append(comm_dict)
-    
+
     return communications
 
 
@@ -184,7 +187,7 @@ async def get_communication(comm_id: str):
     comm = tracker.get_communication(comm_id)
     if not comm:
         raise HTTPException(status_code=404, detail="Communication not found")
-    
+
     return {
         "id": comm.id,
         "agentName": comm.agent_name,
@@ -202,10 +205,10 @@ async def get_communication(comm_id: str):
                 "timestamp": msg.timestamp.isoformat(),
                 "role": msg.role,
                 "content": msg.content,
-                "tokens": msg.tokens
+                "tokens": msg.tokens,
             }
             for msg in comm.messages
-        ]
+        ],
     }
 
 
@@ -240,20 +243,20 @@ async def execute_crewai_medication_review(request: ScenarioExecutionRequest):
 
 
 async def execute_autogen_scenario(
-    request: ScenarioExecutionRequest, 
+    request: ScenarioExecutionRequest,
     scenario_type: str,
-    fhir_config: FHIRConfig = Depends(get_fhir_config)
+    fhir_config: FHIRConfig = Depends(get_fhir_config),
 ):
     """Generic executor for AutoGen scenarios"""
     scenario_id = str(uuid.uuid4())
     logger.info(f"Executing AutoGen scenario '{scenario_type}' with ID: {scenario_id}")
-    
+
     active_scenarios[scenario_id] = {
         "status": "running",
-        "start_time": datetime.now().isoformat(),
+        "start_time": datetime.now(),
         "framework": "autogen",
         "scenario_type": scenario_type,
-        "patient_id": request.patient_id
+        "patient_id": request.patient_id,
     }
 
     # Get API key
@@ -266,11 +269,14 @@ async def execute_autogen_scenario(
 
         # Create AutoGen system
         autogen_system = HealthcareAutogenSystem(api_key, fhir_config)
-        
+
         # Get relevant agents and wrap them
         relevant_agents = autogen_system.get_agents_for_scenario(scenario_type)
         if not relevant_agents:
-            raise HTTPException(status_code=400, detail=f"No agents configured for scenario: {scenario_type}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"No agents configured for scenario: {scenario_type}",
+            )
 
         for agent_name, agent in relevant_agents.items():
             agent_id = f"{scenario_id}-{agent_name}"
@@ -286,10 +292,10 @@ async def execute_autogen_scenario(
                 scenario_type=scenario_type,
             )
             autogen_wrapper.wrap_agent(
-                agent, 
+                agent,
                 agent_id=agent_id,
-                agent_name=agent_name, 
-                specialty="general"  # Placeholder
+                agent_name=agent_name,
+                specialty="general",  # Placeholder
             )
 
         task_description = (
@@ -302,9 +308,9 @@ async def execute_autogen_scenario(
         result = await autogen_system.execute_scenario(
             scenario_type=scenario_type,
             patient_id=request.patient_id,
-            task_description=task_description
+            task_description=task_description,
         )
-        
+
         active_scenarios[scenario_id]["status"] = "completed"
         active_scenarios[scenario_id]["end_time"] = datetime.now().isoformat()
         active_scenarios[scenario_id]["result"] = result
@@ -315,9 +321,14 @@ async def execute_autogen_scenario(
             comm_id = tracker.active_sessions.get(agent_id)
             if comm_id:
                 tracker.complete_communication(
-                    comm_id, 
+                    comm_id,
                     final_response=str(result),
-                    response_time_ms=int((datetime.now() - active_scenarios[scenario_id]["start_time"]).total_seconds() * 1000)
+                    response_time_ms=int(
+                        (
+                            datetime.now() - active_scenarios[scenario_id]["start_time"]
+                        ).total_seconds()
+                        * 1000
+                    ),
                 )
 
         return {"scenario_id": scenario_id, "status": "completed", "result": result}
@@ -331,7 +342,7 @@ async def execute_autogen_scenario(
         active_scenarios[scenario_id]["status"] = "failed"
         active_scenarios[scenario_id]["error"] = str(e)
         # End tracking sessions with error
-        if 'relevant_agents' in locals():
+        if "relevant_agents" in locals():
             for agent_name in relevant_agents.keys():
                 agent_id = f"{scenario_id}-{agent_name}"
                 comm_id = tracker.active_sessions.get(agent_id)
@@ -340,15 +351,15 @@ async def execute_autogen_scenario(
                         comm_id,
                         final_response="",
                         response_time_ms=0,
-                        error_message=str(e)
+                        error_message=str(e),
                     )
         raise HTTPException(status_code=500, detail=f"Scenario execution failed: {e}")
 
 
 async def execute_crewai_scenario(
-    request: ScenarioExecutionRequest, 
+    request: ScenarioExecutionRequest,
     scenario_type: str,
-    fhir_config: FHIRConfig = Depends(get_fhir_config)
+    fhir_config: FHIRConfig = Depends(get_fhir_config),
 ):
     """Generic executor for CrewAI scenarios"""
     scenario_id = str(uuid.uuid4())
@@ -356,10 +367,10 @@ async def execute_crewai_scenario(
 
     active_scenarios[scenario_id] = {
         "status": "running",
-        "start_time": datetime.now().isoformat(),
+        "start_time": datetime.now(),
         "framework": "crewai",
         "scenario_type": scenario_type,
-        "patient_id": request.patient_id
+        "patient_id": request.patient_id,
     }
 
     # Get API key
@@ -369,10 +380,10 @@ async def execute_crewai_scenario(
 
     try:
         from crewai_fhir_agent.agents import HealthcareAgentManager
-        
+
         # Initialize CrewAI system
         crewai_manager = HealthcareAgentManager(api_key, fhir_config)
-        
+
         task_description = (
             f"Execute the {scenario_type} for patient {request.patient_id}. "
             f"Chief complaint: {request.scenario_config.chief_complaint}. "
@@ -381,8 +392,10 @@ async def execute_crewai_scenario(
         )
 
         # The agent that will be used for tracking is the one that executes the task
-        crew_executor = crewai_manager.get_crew_for_scenario(scenario_type, task_description)
-        
+        crew_executor = crewai_manager.get_crew_for_scenario(
+            scenario_type, task_description
+        )
+
         # Start tracking session for the crew
         crew_id = f"{scenario_id}-crew"
         tracker.start_communication(
@@ -397,28 +410,31 @@ async def execute_crewai_scenario(
 
         # Wrap the LLM for the crew
         crewai_wrapper.wrap_llm(
-            llm=crew_executor.llm,
-            agent_id=crew_id,
-            agent_name=f"{scenario_type}_crew"
+            llm=crew_executor.llm, agent_id=crew_id, agent_name=f"{scenario_type}_crew"
         )
 
         result = crew_executor.kickoff()
-        
+
         active_scenarios[scenario_id]["status"] = "completed"
         active_scenarios[scenario_id]["end_time"] = datetime.now().isoformat()
         active_scenarios[scenario_id]["result"] = result
-        
+
         # End tracking session
         comm_id = tracker.active_sessions.get(crew_id)
         if comm_id:
             tracker.complete_communication(
                 comm_id,
                 final_response=str(result),
-                response_time_ms=int((datetime.now() - active_scenarios[scenario_id]["start_time"]).total_seconds() * 1000)
+                response_time_ms=int(
+                    (
+                        datetime.now() - active_scenarios[scenario_id]["start_time"]
+                    ).total_seconds()
+                    * 1000
+                ),
             )
-        
+
         return {"scenario_id": scenario_id, "status": "completed", "result": result}
-        
+
     except ImportError:
         active_scenarios[scenario_id]["status"] = "failed"
         active_scenarios[scenario_id]["error"] = "CrewAI module not available"
@@ -427,14 +443,11 @@ async def execute_crewai_scenario(
         logger.error(f"Scenario execution failed: {e}")
         active_scenarios[scenario_id]["status"] = "failed"
         active_scenarios[scenario_id]["error"] = str(e)
-        if 'crew_id' in locals():
+        if "crew_id" in locals():
             comm_id = tracker.active_sessions.get(crew_id)
             if comm_id:
                 tracker.complete_communication(
-                    comm_id,
-                    final_response="",
-                    response_time_ms=0,
-                    error_message=str(e)
+                    comm_id, final_response="", response_time_ms=0, error_message=str(e)
                 )
         raise HTTPException(status_code=500, detail=f"Scenario execution failed: {e}")
 
@@ -450,7 +463,7 @@ async def get_scenario(scenario_id: str):
     """Get a specific scenario"""
     if scenario_id not in active_scenarios:
         raise HTTPException(status_code=404, detail="Scenario not found")
-    
+
     return active_scenarios[scenario_id]
 
 
@@ -459,7 +472,7 @@ async def delete_scenario(scenario_id: str):
     """Delete a scenario"""
     if scenario_id not in active_scenarios:
         raise HTTPException(status_code=404, detail="Scenario not found")
-    
+
     del active_scenarios[scenario_id]
     return {"message": "Scenario deleted successfully"}
 
@@ -469,8 +482,10 @@ async def export_communications():
     """Export all communications data"""
     return {"data": tracker.export_communications()}
 
+
 app.include_router(api_router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8002) 
+
+    uvicorn.run(app, host="0.0.0.0", port=8002)

@@ -1,5 +1,5 @@
 {
-  "name": "agentic-healthcare-ai -ui",
+  "name": "agentic-healthcare-ai-ui",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
@@ -25,6 +25,9 @@
     "start:mcp": "PORT=6274 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "lint": "eslint src/ --ext .ts,.tsx --max-warnings 0",
+    "type-check": "tsc --noEmit",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
